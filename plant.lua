@@ -1,10 +1,11 @@
--- Auto Plant Executor with Tile->World mapping and Calibrate feature
+-- Auto Plant Executor with Tile->World mapping and Auto Calibrate
 -- Paste as LocalScript in executor (PlayerGui / gethui). Adjust remote name if needed.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 if not player then
@@ -216,13 +217,13 @@ local delayBox = labeledTextbox(content, "Delay (ms)", 4, "e.g. 1000", "1000")
 local seedCountBox = labeledTextbox(content, "Seed Count", 5, "e.g. 10", "10")
 
 -- Mapping parameters
-local tileSizeBox = labeledTextbox(content, "Tile Size (world units per tile)", 6, "e.g. 4", "4")
-local originXBox = labeledTextbox(content, "Origin World X (tile 0)", 7, "e.g. 0", "0")
-local originZBox = labeledTextbox(content, "Origin World Z (tile 0)", 8, "e.g. 0", "0")
+local tileSizeBox = labeledTextbox(content, "Tile Size world units per tile", 6, "e.g. 4", "4")
+local originXBox = labeledTextbox(content, "Origin World X tile 0", 7, "e.g. 0", "0")
+local originZBox = labeledTextbox(content, "Origin World Z tile 0", 8, "e.g. 0", "0")
 
 -- Calibrate button and info
 local calibFrame = Instance.new("Frame", content)
-calibFrame.Size = UDim2.new(1, -12, 0, 44)
+calibFrame.Size = UDim2.new(1, -12, 0, 64)
 calibFrame.BackgroundTransparency = 1
 calibFrame.LayoutOrder = 9
 
@@ -245,6 +246,8 @@ calibInfo.TextColor3 = Color3.fromRGB(180,180,200)
 calibInfo.Font = Enum.Font.SourceSans
 calibInfo.TextSize = 12
 calibInfo.TextXAlignment = Enum.TextXAlignment.Left
+calibInfo.TextYAlignment = Enum.TextYAlignment.Top
+calibInfo.ClipsDescendants = true
 
 -- Start button
 local plantContainer = Instance.new("Frame", content)
@@ -305,7 +308,7 @@ local function waitForHRP(timeout)
     return nil
 end
 
--- Teleport verification (kept robust)
+-- Teleport verification
 local function isClose(posA, posB, tol)
     tol = tol or 1.5
     return (math.abs(posA.X - posB.X) <= tol) and (math.abs(posA.Z - posB.Z) <= tol)
@@ -328,7 +331,6 @@ local function tryTeleportTo(posVec, attempts, safeY)
         if isClose(hrp.Position, target) then
             return true, hrp.Position
         end
-        -- MoveTo as fallback
         pcall(function()
             local char = player.Character
             if char then char:MoveTo(target) end
@@ -351,16 +353,15 @@ local function tileToWorld(tileX, tileY, tileSize, originX, originZ)
     return worldX, worldZ
 end
 
--- Calibrate: find object with attributes TileX/TileY matching inputs and compute origin
+-- Auto-calibrate: coba beberapa mapping dan pilih terbaik
 calibrateBtn.MouseButton1Click:Connect(function()
     local tx = tonumber(tileXBox.Text)
     local ty = tonumber(tileYBox.Text)
-    local tileSize = tonumber(tileSizeBox.Text) or 4
     if not tx or not ty then
         status.Text = "Calibrate: masukkan Tile X dan Tile Y yang valid."
         return
     end
-    status.Text = "Calibrate: mencari objek dengan atribut TileX/TileY..."
+    status.Text = "Calibrate: mencari objek referensi..."
     local found = nil
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj.GetAttribute then
@@ -376,31 +377,89 @@ calibrateBtn.MouseButton1Click:Connect(function()
         status.Text = "Calibrate: tidak menemukan objek dengan atribut TileX/TileY yang cocok."
         return
     end
-    -- use found object's world position to compute origin
+
     local pos = nil
     if found:IsA("BasePart") then
         pos = found.Position
     elseif found:IsA("Model") and found.PrimaryPart then
         pos = found.PrimaryPart.Position
     else
-        -- try to find a child BasePart
         for _, c in ipairs(found:GetDescendants()) do
-            if c:IsA("BasePart") then
-                pos = c.Position
-                break
-            end
+            if c:IsA("BasePart") then pos = c.Position; break end
         end
     end
     if not pos then
-        status.Text = "Calibrate: objek ditemukan tapi tidak memiliki posisi world yang dapat digunakan."
+        status.Text = "Calibrate: objek ditemukan tapi tidak punya posisi world."
         return
     end
-    -- originX = pos.X - tileX * tileSize
-    local originX = pos.X - (tx * tileSize)
-    local originZ = pos.Z - (ty * tileSize)
-    originXBox.Text = tostring(math.floor(originX * 100) / 100)
-    originZBox.Text = tostring(math.floor(originZ * 100) / 100)
-    status.Text = string.format("Calibrate: origin set (OriginX=%.2f, OriginZ=%.2f) based on object %s", originX, originZ, found:GetFullName())
+
+    status.Text = "Calibrate: mencoba beberapa mapping..."
+    local baseTileSize = tonumber(tileSizeBox.Text) or 4
+    local tileSizeCandidates = {baseTileSize, baseTileSize * -1, 2, 3, 5}
+    local originXBase = tonumber(originXBox.Text) or 0
+    local originZBase = tonumber(originZBox.Text) or 0
+
+    local best = nil
+    local tried = {}
+
+    local function evalMapping(tileSize, originX, originZ, swapAxes, halfOffset)
+        local txEff = tx
+        local tyEff = ty
+        local worldX, worldZ
+        if swapAxes then
+            worldX = originX + (tyEff * tileSize)
+            worldZ = originZ + (txEff * tileSize)
+        else
+            worldX = originX + (txEff * tileSize)
+            worldZ = originZ + (tyEff * tileSize)
+        end
+        if halfOffset then
+            worldX = worldX + tileSize/2
+            worldZ = worldZ + tileSize/2
+        end
+        local dx = pos.X - worldX
+        local dz = pos.Z - worldZ
+        local err = math.sqrt(dx*dx + dz*dz)
+        return {tileSize=tileSize, originX=originX, originZ=originZ, swap=swapAxes, half=halfOffset, error=err, predicted=Vector3.new(worldX, pos.Y, worldZ)}
+    end
+
+    for _, ts in ipairs(tileSizeCandidates) do
+        for _, swap in ipairs({false, true}) do
+            for _, half in ipairs({false, true}) do
+                local origins = {
+                    {originXBase, originZBase},
+                    {originXBase + ts, originZBase},
+                    {originXBase - ts, originZBase},
+                    {originXBase, originZBase + ts},
+                    {originXBase, originZBase - ts},
+                    {originXBase + ts/2, originZBase + ts/2},
+                }
+                for _, o in ipairs(origins) do
+                    local res = evalMapping(ts, o[1], o[2], swap, half)
+                    table.insert(tried, res)
+                    if not best or res.error < best.error then best = res end
+                end
+            end
+        end
+    end
+
+    table.sort(tried, function(a,b) return a.error < b.error end)
+    local topN = {}
+    for i=1, math.min(6, #tried) do
+        local r = tried[i]
+        table.insert(topN, string.format("%d) err=%.2f | tileSize=%.2f swap=%s half=%s origin=(%.2f,%.2f) -> pred=(%.2f,%.2f)",
+            i, r.error, r.tileSize, tostring(r.swap), tostring(r.half), r.originX, r.originZ, r.predicted.X, r.predicted.Z))
+    end
+
+    calibInfo.Text = table.concat(topN, "\n")
+    if best then
+        tileSizeBox.Text = tostring(best.tileSize)
+        originXBox.Text = tostring(math.floor(best.originX * 100) / 100)
+        originZBox.Text = tostring(math.floor(best.originZ * 100) / 100)
+        status.Text = string.format("Calibrate: selesai. Best error=%.2f. Parameter diisi otomatis.", best.error)
+    else
+        status.Text = "Calibrate: tidak menemukan mapping yang cocok."
+    end
 end)
 
 -- Main planting logic (uses tile->world mapping)
@@ -455,7 +514,6 @@ plantBtn.MouseButton1Click:Connect(function()
                 else
                     status.Text = "Place failed: " .. tostring(errPlace)
                 end
-                -- small movement to help server accept place
                 pcall(function()
                     local hrp = waitForHRP(0.5)
                     if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(1, 0, 0) end
