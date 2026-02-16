@@ -1,12 +1,11 @@
--- AutoPlantUI (Auto Farm style) — Punch Count removed, improved teleport verification
--- Paste as LocalScript in executor (supports gethui/syn). Adjust remote name if needed.
+-- Auto Plant Executor with Tile->World mapping and Calibrate feature
+-- Paste as LocalScript in executor (PlayerGui / gethui). Adjust remote name if needed.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
--- Get LocalPlayer (some executors need a short wait)
 local player = Players.LocalPlayer
 if not player then
     for i = 1, 30 do
@@ -16,14 +15,14 @@ if not player then
     end
 end
 
--- Remote lookup (adjust path/name if your game uses different)
+-- Remote lookup
 local function findPlaceRemote()
     local root = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
     return root and root:FindFirstChild("PlayerPlaceItem")
 end
 local placeRemote = findPlaceRemote()
 
--- Choose GUI parent (executor-friendly)
+-- GUI parent selection (executor-friendly)
 local function chooseGuiParent()
     if player and player:FindFirstChild("PlayerGui") then
         return player.PlayerGui
@@ -39,7 +38,7 @@ local guiParent = chooseGuiParent()
 -- Create ScreenGui
 local okGui, gui = pcall(function()
     local g = Instance.new("ScreenGui")
-    g.Name = "AutoPlantUI"
+    g.Name = "AutoPlantUI_Mapped"
     g.ResetOnSpawn = false
     g.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     g.Parent = guiParent
@@ -50,13 +49,12 @@ if not okGui or not gui then
     return
 end
 
--- Protect GUI if executor supports it
 if type(syn) == "table" and type(syn.protect_gui) == "function" then
     pcall(function() syn.protect_gui(gui) end)
 end
 
--- Panel sizes (match Auto Farm style)
-local PANEL_WIDTH, PANEL_HEIGHT = 380, 320
+-- Panel sizes
+local PANEL_WIDTH, PANEL_HEIGHT = 420, 360
 local PANEL_MIN_HEIGHT = 40
 
 local panel = Instance.new("Frame")
@@ -82,10 +80,10 @@ dragBar.BorderSizePixel = 0
 dragBar.ZIndex = 3
 
 local dragTitle = Instance.new("TextLabel", dragBar)
-dragTitle.Size = UDim2.new(1, -100, 1, 0)
+dragTitle.Size = UDim2.new(1, -160, 1, 0)
 dragTitle.Position = UDim2.new(0, 12, 0, 0)
 dragTitle.BackgroundTransparency = 1
-dragTitle.Text = "Harvest Studio"
+dragTitle.Text = "Harvest Studio (Auto Plant)"
 dragTitle.TextColor3 = Color3.fromRGB(235,235,240)
 dragTitle.Font = Enum.Font.SourceSansBold
 dragTitle.TextSize = 16
@@ -94,7 +92,7 @@ dragTitle.TextXAlignment = Enum.TextXAlignment.Left
 local minimizeBtn = Instance.new("TextButton", dragBar)
 minimizeBtn.Name = "Minimize"
 minimizeBtn.Size = UDim2.new(0, 28, 0, 24)
-minimizeBtn.Position = UDim2.new(1, -72, 0, 6)
+minimizeBtn.Position = UDim2.new(1, -120, 0, 6)
 minimizeBtn.BackgroundColor3 = Color3.fromRGB(120,120,120)
 minimizeBtn.Text = "—"
 minimizeBtn.Font = Enum.Font.SourceSansBold
@@ -106,7 +104,7 @@ minimizeBtn.ZIndex = 4
 local closeBtn = Instance.new("TextButton", dragBar)
 closeBtn.Name = "Close"
 closeBtn.Size = UDim2.new(0, 28, 0, 24)
-closeBtn.Position = UDim2.new(1, -36, 0, 6)
+closeBtn.Position = UDim2.new(1, -84, 0, 6)
 closeBtn.BackgroundColor3 = Color3.fromRGB(200,60,60)
 closeBtn.Text = "X"
 closeBtn.Font = Enum.Font.SourceSansBold
@@ -148,10 +146,10 @@ closeBtn.MouseButton1Click:Connect(function()
     pcall(function() gui:Destroy() end)
 end)
 
--- Content (scrollable) - ensure scrolling works like Auto Farm
+-- Content (scrollable)
 local content = Instance.new("ScrollingFrame", panel)
 content.Name = "ContentScroll"
-content.Size = UDim2.new(1, -24, 1, -72)
+content.Size = UDim2.new(1, -24, 1, -120)
 content.Position = UDim2.new(0, 12, 0, 60)
 content.BackgroundTransparency = 1
 content.ScrollBarThickness = 6
@@ -161,7 +159,7 @@ content.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
 content.ScrollBarImageColor3 = Color3.fromRGB(100,100,110)
 content.Visible = true
 content.ZIndex = 2
-content.Active = true -- important for mouse wheel
+content.Active = true
 
 local listLayout = Instance.new("UIListLayout", content)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -178,7 +176,7 @@ listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
     content.CanvasSize = UDim2.new(0, 0, 0, sizeY)
 end)
 
--- Helper to create labeled textbox inside scrolling frame
+-- Helper to create labeled textbox
 local function labeledTextbox(parent, labelText, layoutOrder, placeholder, default)
     local container = Instance.new("Frame", parent)
     container.Size = UDim2.new(1, -12, 0, 64)
@@ -210,24 +208,49 @@ local function labeledTextbox(parent, labelText, layoutOrder, placeholder, defau
     return box, container
 end
 
--- Inputs (match Auto Farm UI fields, Punch Count removed)
+-- Inputs
 local tileXBox = labeledTextbox(content, "Tile X (base)", 1, "e.g. 2", "2")
 local tileYBox = labeledTextbox(content, "Tile Y (base)", 2, "e.g. 37", "37")
 local idBox = labeledTextbox(content, "Item ID (seed)", 3, "e.g. 10", "10")
 local delayBox = labeledTextbox(content, "Delay (ms)", 4, "e.g. 1000", "1000")
 local seedCountBox = labeledTextbox(content, "Seed Count", 5, "e.g. 10", "10")
 
--- Spacer
-local spacer = Instance.new("Frame", content)
-spacer.Size = UDim2.new(1, 0, 0, 6)
-spacer.BackgroundTransparency = 1
-spacer.LayoutOrder = 6
+-- Mapping parameters
+local tileSizeBox = labeledTextbox(content, "Tile Size (world units per tile)", 6, "e.g. 4", "4")
+local originXBox = labeledTextbox(content, "Origin World X (tile 0)", 7, "e.g. 0", "0")
+local originZBox = labeledTextbox(content, "Origin World Z (tile 0)", 8, "e.g. 0", "0")
 
--- Start Auto Plant button (only control requested)
+-- Calibrate button and info
+local calibFrame = Instance.new("Frame", content)
+calibFrame.Size = UDim2.new(1, -12, 0, 44)
+calibFrame.BackgroundTransparency = 1
+calibFrame.LayoutOrder = 9
+
+local calibrateBtn = Instance.new("TextButton", calibFrame)
+calibrateBtn.Size = UDim2.new(0.5, -6, 1, 0)
+calibrateBtn.Position = UDim2.new(0, 0, 0, 0)
+calibrateBtn.BackgroundColor3 = Color3.fromRGB(88,165,255)
+calibrateBtn.Text = "Calibrate From Tile"
+calibrateBtn.Font = Enum.Font.SourceSansBold
+calibrateBtn.TextSize = 14
+calibrateBtn.TextColor3 = Color3.fromRGB(18,20,25)
+calibrateBtn.BorderSizePixel = 0
+
+local calibInfo = Instance.new("TextLabel", calibFrame)
+calibInfo.Size = UDim2.new(0.5, -6, 1, 0)
+calibInfo.Position = UDim2.new(0.5, 12, 0, 0)
+calibInfo.BackgroundTransparency = 1
+calibInfo.Text = "Calibrate finds object with TileX/TileY attributes"
+calibInfo.TextColor3 = Color3.fromRGB(180,180,200)
+calibInfo.Font = Enum.Font.SourceSans
+calibInfo.TextSize = 12
+calibInfo.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Start button
 local plantContainer = Instance.new("Frame", content)
 plantContainer.Size = UDim2.new(1, -12, 0, 56)
 plantContainer.BackgroundTransparency = 1
-plantContainer.LayoutOrder = 7
+plantContainer.LayoutOrder = 10
 
 local plantBtn = Instance.new("TextButton", plantContainer)
 plantBtn.Size = UDim2.new(1, 0, 1, 0)
@@ -242,16 +265,18 @@ plantBtn.BorderSizePixel = 0
 
 -- Status label
 local status = Instance.new("TextLabel", content)
-status.Size = UDim2.new(1, -12, 0, 20)
+status.Size = UDim2.new(1, -12, 0, 40)
 status.BackgroundTransparency = 1
-status.LayoutOrder = 8
-status.Text = "Status: idle"
+status.LayoutOrder = 11
+status.Text = "Status: ready"
 status.TextColor3 = Color3.fromRGB(160,200,255)
 status.Font = Enum.Font.SourceSans
 status.TextSize = 12
 status.TextXAlignment = Enum.TextXAlignment.Left
+status.TextYAlignment = Enum.TextYAlignment.Top
+status.ClipsDescendants = true
 
--- Safe remote helpers
+-- Helpers: remote
 local function safeFind()
     placeRemote = findPlaceRemote()
 end
@@ -265,7 +290,7 @@ local function safeFirePlace(tx, ty, id)
     return ok, err
 end
 
--- Teleport helpers: wait for HRP, attempt multiple methods and verify
+-- Wait for HRP
 local function waitForHRP(timeout)
     timeout = timeout or 6
     local t0 = tick()
@@ -273,92 +298,129 @@ local function waitForHRP(timeout)
         local char = player and player.Character
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-            local humanoid = char:FindFirstChildOfClass("Humanoid")
-            if hrp then
-                return hrp, humanoid
-            end
+            if hrp then return hrp end
         end
         wait(0.06)
     end
-    return nil, nil
+    return nil
 end
 
+-- Teleport verification (kept robust)
 local function isClose(posA, posB, tol)
     tol = tol or 1.5
     return (math.abs(posA.X - posB.X) <= tol) and (math.abs(posA.Z - posB.Z) <= tol)
 end
 
-local function teleportAndVerify(worldX, worldZ, attempts, safeY)
-    attempts = attempts or 5
-    safeY = safeY or 50
-
-    local hrp, humanoid = waitForHRP(6)
-    if not hrp then return false, "HumanoidRootPart not found (character not ready)" end
-
-    local targetPos = Vector3.new(tonumber(worldX) or 2, safeY, tonumber(worldZ) or 37)
-    local targetCFrame = CFrame.new(targetPos)
-
+local function tryTeleportTo(posVec, attempts, safeY)
+    attempts = attempts or 4
+    safeY = safeY or posVec.Y
+    local hrp = waitForHRP(6)
+    if not hrp then return false, "HumanoidRootPart not found" end
+    local target = Vector3.new(posVec.X, safeY, posVec.Z)
     for i = 1, attempts do
-        -- 1) Direct set CFrame
-        local ok, err = pcall(function() hrp.CFrame = targetCFrame end)
+        pcall(function() hrp.CFrame = CFrame.new(target) end)
         wait(0.12)
-        if isClose(hrp.Position, targetPos) then
-            return true
+        if isClose(hrp.Position, target) then
+            return true, hrp.Position
         end
-
-        -- 2) Try nudging humanoid state then set CFrame
-        if humanoid then
-            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
-            wait(0.06)
-            pcall(function() hrp.CFrame = targetCFrame end)
-            wait(0.12)
-            if isClose(hrp.Position, targetPos) then
-                return true
-            end
+        pcall(function() hrp.CFrame = CFrame.new(target.X, safeY + 3, target.Z) end)
+        wait(0.12)
+        if isClose(hrp.Position, target) then
+            return true, hrp.Position
         end
-
-        -- 3) Try MoveTo on character (server-mediated)
+        -- MoveTo as fallback
         pcall(function()
             local char = player.Character
-            if char then
-                char:MoveTo(targetPos)
-            end
+            if char then char:MoveTo(target) end
         end)
         wait(0.25)
-        if isClose(hrp.Position, targetPos) then
-            return true
-        end
-
-        -- 4) Upward nudge then set CFrame again
-        pcall(function() hrp.CFrame = CFrame.new(targetPos.X, safeY + 3, targetPos.Z) end)
-        wait(0.12)
-        if isClose(hrp.Position, targetPos) then
-            return true
+        if isClose(hrp.Position, target) then
+            return true, hrp.Position
         end
     end
-
-    -- Final verification
-    if isClose(hrp.Position, targetPos) then
-        return true
-    end
-    return false, "teleport verification failed (server may override client movement)"
+    return false, hrp and hrp.Position or nil
 end
 
--- Planting logic: teleport then place seeds along +X (no punching)
+-- Tile->World conversion
+local function tileToWorld(tileX, tileY, tileSize, originX, originZ)
+    tileSize = tonumber(tileSize) or 4
+    originX = tonumber(originX) or 0
+    originZ = tonumber(originZ) or 0
+    local worldX = originX + (tileX * tileSize)
+    local worldZ = originZ + (tileY * tileSize)
+    return worldX, worldZ
+end
+
+-- Calibrate: find object with attributes TileX/TileY matching inputs and compute origin
+calibrateBtn.MouseButton1Click:Connect(function()
+    local tx = tonumber(tileXBox.Text)
+    local ty = tonumber(tileYBox.Text)
+    local tileSize = tonumber(tileSizeBox.Text) or 4
+    if not tx or not ty then
+        status.Text = "Calibrate: masukkan Tile X dan Tile Y yang valid."
+        return
+    end
+    status.Text = "Calibrate: mencari objek dengan atribut TileX/TileY..."
+    local found = nil
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj.GetAttribute then
+            local atx = obj:GetAttribute("TileX") or obj:GetAttribute("tileX")
+            local aty = obj:GetAttribute("TileY") or obj:GetAttribute("tileY")
+            if atx and aty and tonumber(atx) == tx and tonumber(aty) == ty then
+                found = obj
+                break
+            end
+        end
+    end
+    if not found then
+        status.Text = "Calibrate: tidak menemukan objek dengan atribut TileX/TileY yang cocok."
+        return
+    end
+    -- use found object's world position to compute origin
+    local pos = nil
+    if found:IsA("BasePart") then
+        pos = found.Position
+    elseif found:IsA("Model") and found.PrimaryPart then
+        pos = found.PrimaryPart.Position
+    else
+        -- try to find a child BasePart
+        for _, c in ipairs(found:GetDescendants()) do
+            if c:IsA("BasePart") then
+                pos = c.Position
+                break
+            end
+        end
+    end
+    if not pos then
+        status.Text = "Calibrate: objek ditemukan tapi tidak memiliki posisi world yang dapat digunakan."
+        return
+    end
+    -- originX = pos.X - tileX * tileSize
+    local originX = pos.X - (tx * tileSize)
+    local originZ = pos.Z - (ty * tileSize)
+    originXBox.Text = tostring(math.floor(originX * 100) / 100)
+    originZBox.Text = tostring(math.floor(originZ * 100) / 100)
+    status.Text = string.format("Calibrate: origin set (OriginX=%.2f, OriginZ=%.2f) based on object %s", originX, originZ, found:GetFullName())
+end)
+
+-- Main planting logic (uses tile->world mapping)
 local plantRunning = false
 
 plantBtn.MouseButton1Click:Connect(function()
     plantRunning = not plantRunning
     if plantRunning then
         plantBtn.Text = "⏸ Stop Auto Plant"
-        status.Text = "Status: preparing auto plant..."
+        status.Text = "Status: preparing..."
         spawn(function()
-            -- read inputs
             local baseTileX = tonumber(tileXBox.Text) or 2
             local baseTileY = tonumber(tileYBox.Text) or 37
             local id = tonumber(idBox.Text)
             local delayMs = tonumber(delayBox.Text) or 1000
             local seedCount = tonumber(seedCountBox.Text) or 1
+            local tileSize = tonumber(tileSizeBox.Text) or 4
+            local originX = tonumber(originXBox.Text) or 0
+            local originZ = tonumber(originZBox.Text) or 0
+
             if seedCount < 1 then seedCount = 1 end
             if not id then
                 status.Text = "Status: invalid Item ID"
@@ -367,41 +429,37 @@ plantBtn.MouseButton1Click:Connect(function()
                 return
             end
 
-            -- Teleport world coords: default to (2,37) as requested
-            status.Text = "Status: teleporting to (2,37)..."
-            local ok, err = teleportAndVerify(2, 37, 6, 50)
+            -- compute world coords for base tile
+            local worldX, worldZ = tileToWorld(baseTileX, baseTileY, tileSize, originX, originZ)
+            status.Text = string.format("Teleporting to world (%.2f, %.2f) mapped from tile (%d,%d)...", worldX, worldZ, baseTileX, baseTileY)
+
+            local ok, info = tryTeleportTo(Vector3.new(worldX, 50, worldZ), 6, 50)
             if not ok then
-                status.Text = "Teleport failed: " .. tostring(err)
+                local posStr = info and ("current HRP pos: " .. tostring(info)) or "no HRP pos"
+                status.Text = "Teleport failed: verification failed; " .. posStr
                 plantRunning = false
                 plantBtn.Text = "▶ Start Auto Plant"
                 return
             end
 
-            status.Text = "Status: teleported. Starting planting..."
+            status.Text = "Teleported. Starting planting..."
             for i = 1, seedCount do
                 if not plantRunning then break end
-                local targetTileX = math.floor(baseTileX + (i - 1) + 0.5)
-                local targetTileY = math.floor(baseTileY + 0.5) + 1 -- Y+1 mapping
-
-                -- Place
-                if not placeRemote then safeFind() end
-                if placeRemote then
-                    local okPlace, errPlace = safeFirePlace(targetTileX, targetTileY, id)
-                    if okPlace then
-                        status.Text = string.format("Placed %d/%d at (%d,%d)", i, seedCount, targetTileX, targetTileY)
-                    else
-                        status.Text = "Place failed: " .. tostring(errPlace)
-                    end
+                local tileX = baseTileX + (i - 1)
+                local tileY = baseTileY
+                local targetTileX = math.floor(tileX + 0.5)
+                local targetTileY = math.floor(tileY + 0.5) + 1 -- Y+1 mapping for place remote
+                local okPlace, errPlace = safeFirePlace(targetTileX, targetTileY, id)
+                if okPlace then
+                    status.Text = string.format("Placed %d/%d at tile (%d,%d)", i, seedCount, targetTileX, targetTileY)
                 else
-                    status.Text = "Place remote not found"
+                    status.Text = "Place failed: " .. tostring(errPlace)
                 end
-
-                -- optional small movement to mimic walking and help server accept place
+                -- small movement to help server accept place
                 pcall(function()
                     local hrp = waitForHRP(0.5)
                     if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(1, 0, 0) end
                 end)
-
                 wait((delayMs or 1000) / 1000)
             end
 
@@ -435,10 +493,9 @@ minimizeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Cleanup
 gui.Destroying:Connect(function()
     plantRunning = false
 end)
 
-status.Text = "Status: ready — masukkan Tile X,Y, Item ID, Seed Count lalu Start"
-print("AutoPlantUI loaded (Punch Count removed)")
+status.Text = "Status: ready — gunakan Calibrate From Tile atau atur Tile Size / Origin lalu Start"
+print("AutoPlantUI_Mapped loaded")
