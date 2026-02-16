@@ -1,6 +1,4 @@
--- AutoPlantUI (no Punch Count)
--- UI matches Auto Farm style. Auto Plant: teleport then place seeds along +X.
--- Punch Count removed entirely from UI and logic.
+-- AutoPlantUI (Auto Farm style) — Punch Count removed, improved teleport verification
 -- Paste as LocalScript in executor (supports gethui/syn). Adjust remote name if needed.
 
 local Players = game:GetService("Players")
@@ -267,26 +265,22 @@ local function safeFirePlace(tx, ty, id)
     return ok, err
 end
 
--- Teleport helpers: wait for HRP, attempt teleport multiple times and verify
+-- Teleport helpers: wait for HRP, attempt multiple methods and verify
 local function waitForHRP(timeout)
-    timeout = timeout or 5
+    timeout = timeout or 6
     local t0 = tick()
     while tick() - t0 < timeout do
         local char = player and player.Character
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
-            if hrp then return hrp end
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if hrp then
+                return hrp, humanoid
+            end
         end
-        wait(0.05)
+        wait(0.06)
     end
-    return nil
-end
-
-local function tryTeleport(hrp, targetCFrame)
-    local ok, err = pcall(function()
-        hrp.CFrame = targetCFrame
-    end)
-    return ok, err
+    return nil, nil
 end
 
 local function isClose(posA, posB, tol)
@@ -297,46 +291,56 @@ end
 local function teleportAndVerify(worldX, worldZ, attempts, safeY)
     attempts = attempts or 5
     safeY = safeY or 50
-    local hrp = waitForHRP(6)
-    local humanoid = nil
-    if player and player.Character then
-        humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-    end
+
+    local hrp, humanoid = waitForHRP(6)
     if not hrp then return false, "HumanoidRootPart not found (character not ready)" end
 
     local targetPos = Vector3.new(tonumber(worldX) or 2, safeY, tonumber(worldZ) or 37)
     local targetCFrame = CFrame.new(targetPos)
 
     for i = 1, attempts do
-        -- direct set
-        pcall(function() hrp.CFrame = targetCFrame end)
+        -- 1) Direct set CFrame
+        local ok, err = pcall(function() hrp.CFrame = targetCFrame end)
         wait(0.12)
-        if isClose(hrp.Position, targetPos) then return true end
+        if isClose(hrp.Position, targetPos) then
+            return true
+        end
 
-        -- try humanoid state then set
+        -- 2) Try nudging humanoid state then set CFrame
         if humanoid then
             pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
             wait(0.06)
             pcall(function() hrp.CFrame = targetCFrame end)
             wait(0.12)
-            if isClose(hrp.Position, targetPos) then return true end
+            if isClose(hrp.Position, targetPos) then
+                return true
+            end
         end
 
-        -- try MoveTo
+        -- 3) Try MoveTo on character (server-mediated)
         pcall(function()
             local char = player.Character
-            if char then char:MoveTo(targetPos) end
+            if char then
+                char:MoveTo(targetPos)
+            end
         end)
         wait(0.25)
-        if isClose(hrp.Position, targetPos) then return true end
+        if isClose(hrp.Position, targetPos) then
+            return true
+        end
 
-        -- upward nudge
+        -- 4) Upward nudge then set CFrame again
         pcall(function() hrp.CFrame = CFrame.new(targetPos.X, safeY + 3, targetPos.Z) end)
         wait(0.12)
-        if isClose(hrp.Position, targetPos) then return true end
+        if isClose(hrp.Position, targetPos) then
+            return true
+        end
     end
 
-    if isClose(hrp.Position, targetPos) then return true end
+    -- Final verification
+    if isClose(hrp.Position, targetPos) then
+        return true
+    end
     return false, "teleport verification failed (server may override client movement)"
 end
 
