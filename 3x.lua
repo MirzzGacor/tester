@@ -1,7 +1,7 @@
--- Modern Farm UI (Place + Punch pada tiga X: x-1, x, x+1)
+-- Modern Farm UI (3 X offsets, Place -> Punch N times)
 -- Executor-friendly, scrollable, draggable, minimize & close
--- Behavior: untuk setiap siklus, lakukan Place -> wait(punchDelay) -> Punch
--- pada koordinat targetX = baseX + offset, targetY = baseY + 1, untuk offsets {-1,0,1}.
+-- Behavior: untuk setiap offset (x-1, x, x+1) lakukan Place lalu Punch sebanyak N kali pada koordinat yang sama
+-- Paste sebagai LocalScript atau jalankan di APK executor. Sesuaikan nama remote jika perlu.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -68,7 +68,7 @@ end
 gui.Enabled = true
 
 -- Panel sizes
-local PANEL_WIDTH, PANEL_HEIGHT = 380, 320
+local PANEL_WIDTH, PANEL_HEIGHT = 380, 360
 local PANEL_MIN_HEIGHT = 40
 
 -- Main panel
@@ -95,7 +95,7 @@ dragBar.BorderSizePixel = 0
 dragBar.ZIndex = 3
 
 local dragTitle = Instance.new("TextLabel", dragBar)
-dragTitle.Size = UDim2.new(1, -100, 1, 0)
+dragTitle.Size = UDim2.new(1, -140, 1, 0)
 dragTitle.Position = UDim2.new(0, 12, 0, 0)
 dragTitle.BackgroundTransparency = 1
 dragTitle.Text = "Harvest Studio"
@@ -107,7 +107,7 @@ dragTitle.TextXAlignment = Enum.TextXAlignment.Left
 local minimizeBtn = Instance.new("TextButton", dragBar)
 minimizeBtn.Name = "Minimize"
 minimizeBtn.Size = UDim2.new(0, 28, 0, 24)
-minimizeBtn.Position = UDim2.new(1, -72, 0, 6)
+minimizeBtn.Position = UDim2.new(1, -104, 0, 6)
 minimizeBtn.BackgroundColor3 = Color3.fromRGB(120,120,120)
 minimizeBtn.Text = "—"
 minimizeBtn.Font = Enum.Font.SourceSansBold
@@ -119,7 +119,7 @@ minimizeBtn.ZIndex = 4
 local closeBtn = Instance.new("TextButton", dragBar)
 closeBtn.Name = "Close"
 closeBtn.Size = UDim2.new(0, 28, 0, 24)
-closeBtn.Position = UDim2.new(1, -36, 0, 6)
+closeBtn.Position = UDim2.new(1, -68, 0, 6)
 closeBtn.BackgroundColor3 = Color3.fromRGB(200,60,60)
 closeBtn.Text = "X"
 closeBtn.Font = Enum.Font.SourceSansBold
@@ -164,7 +164,7 @@ end)
 -- Content (scrollable)
 local content = Instance.new("ScrollingFrame", panel)
 content.Name = "ContentScroll"
-content.Size = UDim2.new(1, -24, 1, -72)
+content.Size = UDim2.new(1, -24, 1, -84)
 content.Position = UDim2.new(0, 12, 0, 60)
 content.BackgroundTransparency = 1
 content.ScrollBarThickness = 6
@@ -227,18 +227,19 @@ local tileXBox = labeledTextbox(content, "Tile X", 1, "e.g. 44", "")
 local tileYBox = labeledTextbox(content, "Tile Y", 2, "e.g. 37", "")
 local idBox = labeledTextbox(content, "Item ID", 3, "e.g. 10", "10")
 local delayBox = labeledTextbox(content, "Delay (ms)", 4, "e.g. 1000", "1000")
+local punchCountBox = labeledTextbox(content, "Punch Count", 5, "e.g. 3", "3") -- new input for punch count
 
 -- Spacer
 local spacer = Instance.new("Frame", content)
 spacer.Size = UDim2.new(1, 0, 0, 6)
 spacer.BackgroundTransparency = 1
-spacer.LayoutOrder = 5
+spacer.LayoutOrder = 6
 
--- Single Start Auto Farm button (starts both Place and Punch at same coords for three X)
+-- Single Start Auto Farm button (starts both Place and Punch N times for three X)
 local farmContainer = Instance.new("Frame", content)
 farmContainer.Size = UDim2.new(1, -12, 0, 56)
 farmContainer.BackgroundTransparency = 1
-farmContainer.LayoutOrder = 6
+farmContainer.LayoutOrder = 7
 
 local farmBtn = Instance.new("TextButton", farmContainer)
 farmBtn.Size = UDim2.new(1, 0, 1, 0)
@@ -255,7 +256,7 @@ farmBtn.BorderSizePixel = 0
 local status = Instance.new("TextLabel", content)
 status.Size = UDim2.new(1, -12, 0, 20)
 status.BackgroundTransparency = 1
-status.LayoutOrder = 7
+status.LayoutOrder = 8
 status.Text = "Status: idle"
 status.TextColor3 = Color3.fromRGB(160,200,255)
 status.Font = Enum.Font.SourceSans
@@ -265,7 +266,7 @@ status.TextXAlignment = Enum.TextXAlignment.Left
 local placeStatus = Instance.new("TextLabel", content)
 placeStatus.Size = UDim2.new(1, -12, 0, 18)
 placeStatus.BackgroundTransparency = 1
-placeStatus.LayoutOrder = 8
+placeStatus.LayoutOrder = 9
 placeStatus.Text = "Place: idle"
 placeStatus.TextColor3 = Color3.fromRGB(180,220,180)
 placeStatus.Font = Enum.Font.SourceSans
@@ -275,7 +276,7 @@ placeStatus.TextXAlignment = Enum.TextXAlignment.Left
 local punchStatus = Instance.new("TextLabel", content)
 punchStatus.Size = UDim2.new(1, -12, 0, 18)
 punchStatus.BackgroundTransparency = 1
-punchStatus.LayoutOrder = 9
+punchStatus.LayoutOrder = 10
 punchStatus.Text = "Punch: idle"
 punchStatus.TextColor3 = Color3.fromRGB(180,220,180)
 punchStatus.Font = Enum.Font.SourceSans
@@ -325,6 +326,8 @@ farmBtn.MouseButton1Click:Connect(function()
                 local baseY = tonumber(tileYBox.Text)
                 local id = tonumber(idBox.Text)
                 local delayMs = tonumber(delayBox.Text) or 1000
+                local punchCount = tonumber(punchCountBox.Text) or 1
+                if punchCount < 1 then punchCount = 1 end
 
                 if not baseX or not baseY or not id then
                     placeStatus.Text = "Place: invalid input"
@@ -357,14 +360,19 @@ farmBtn.MouseButton1Click:Connect(function()
                     -- tunggu singkat agar server memproses place
                     wait(punchDelay)
 
-                    -- Punch pada koordinat yang sama
+                    -- Punch sebanyak punchCount kali pada koordinat yang sama
                     if not punchRemote then safeFind() end
                     if punchRemote then
-                        local okPunch, errPunch = safeFirePunch(targetX, targetY)
-                        if okPunch then
-                            punchStatus.Text = string.format("Punch: fired at (%d,%d)", targetX, targetY)
-                        else
-                            punchStatus.Text = "Punch failed: " .. tostring(errPunch)
+                        for i = 1, punchCount do
+                            if not farmRunning then break end
+                            local okPunch, errPunch = safeFirePunch(targetX, targetY)
+                            if okPunch then
+                                punchStatus.Text = string.format("Punch: fired %d/%d at (%d,%d)", i, punchCount, targetX, targetY)
+                            else
+                                punchStatus.Text = "Punch failed: " .. tostring(errPunch)
+                            end
+                            -- jeda kecil antar punch agar tidak terlalu cepat
+                            wait(punchDelay)
                         end
                     else
                         punchStatus.Text = "Punch: remote not found"
@@ -416,5 +424,5 @@ gui.Destroying:Connect(function()
 end)
 
 -- Initial hint
-status.Text = "Status: ready — masukkan Tile X,Y, Item ID lalu Start"
-print("ModernFarmUI: GUI created and running (3 X offsets)")
+status.Text = "Status: ready — masukkan Tile X,Y, Item ID, Punch Count lalu Start"
+print("ModernFarmUI: GUI created and running (3 X offsets, Place -> Punch N times)")
