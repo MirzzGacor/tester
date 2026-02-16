@@ -227,18 +227,20 @@ local tileXBox = labeledTextbox(content, "Tile X", 1, "e.g. 44", "")
 local tileYBox = labeledTextbox(content, "Tile Y", 2, "e.g. 37", "")
 local idBox = labeledTextbox(content, "Item ID", 3, "e.g. 10", "10")
 local delayBox = labeledTextbox(content, "Delay (ms)", 4, "e.g. 1000", "1000")
+-- ADDED: Punch Count input (only addition requested)
+local punchCountBox = labeledTextbox(content, "Punch Count", 5, "e.g. 3", "1")
 
 -- Spacer
 local spacer = Instance.new("Frame", content)
 spacer.Size = UDim2.new(1, 0, 0, 6)
 spacer.BackgroundTransparency = 1
-spacer.LayoutOrder = 5
+spacer.LayoutOrder = 6
 
 -- Single Start Auto Farm button (starts both Place and Punch at same coords)
 local farmContainer = Instance.new("Frame", content)
 farmContainer.Size = UDim2.new(1, -12, 0, 56)
 farmContainer.BackgroundTransparency = 1
-farmContainer.LayoutOrder = 6
+farmContainer.LayoutOrder = 7
 
 local farmBtn = Instance.new("TextButton", farmContainer)
 farmBtn.Size = UDim2.new(1, 0, 1, 0)
@@ -255,7 +257,7 @@ farmBtn.BorderSizePixel = 0
 local status = Instance.new("TextLabel", content)
 status.Size = UDim2.new(1, -12, 0, 20)
 status.BackgroundTransparency = 1
-status.LayoutOrder = 7
+status.LayoutOrder = 8
 status.Text = "Status: idle"
 status.TextColor3 = Color3.fromRGB(160,200,255)
 status.Font = Enum.Font.SourceSans
@@ -265,7 +267,7 @@ status.TextXAlignment = Enum.TextXAlignment.Left
 local placeStatus = Instance.new("TextLabel", content)
 placeStatus.Size = UDim2.new(1, -12, 0, 18)
 placeStatus.BackgroundTransparency = 1
-placeStatus.LayoutOrder = 8
+placeStatus.LayoutOrder = 9
 placeStatus.Text = "Place: idle"
 placeStatus.TextColor3 = Color3.fromRGB(180,220,180)
 placeStatus.Font = Enum.Font.SourceSans
@@ -275,7 +277,7 @@ placeStatus.TextXAlignment = Enum.TextXAlignment.Left
 local punchStatus = Instance.new("TextLabel", content)
 punchStatus.Size = UDim2.new(1, -12, 0, 18)
 punchStatus.BackgroundTransparency = 1
-punchStatus.LayoutOrder = 9
+punchStatus.LayoutOrder = 10
 punchStatus.Text = "Punch: idle"
 punchStatus.TextColor3 = Color3.fromRGB(180,220,180)
 punchStatus.Font = Enum.Font.SourceSans
@@ -323,6 +325,8 @@ farmBtn.MouseButton1Click:Connect(function()
                 local ty = tonumber(tileYBox.Text)
                 local id = tonumber(idBox.Text)
                 local delayMs = tonumber(delayBox.Text) or 1000
+                local punchCount = tonumber(punchCountBox.Text) or 1
+                if punchCount < 1 then punchCount = 1 end
 
                 if not tx or not ty or not id then
                     placeStatus.Text = "Place: invalid input"
@@ -352,14 +356,18 @@ farmBtn.MouseButton1Click:Connect(function()
                 -- Small, consistent delay to let server process the place before punching
                 wait(punchDelay)
 
-                -- Immediately attempt punch at the EXACT SAME canonical coordinates
+                -- Perform punchCount punches at the EXACT SAME canonical coordinates
                 if not punchRemote then safeFind() end
                 if punchRemote then
-                    local okPunch, errPunch = safeFirePunch(targetX, targetY)
-                    if okPunch then
-                        punchStatus.Text = string.format("Punch: fired at (%d,%d)", targetX, targetY)
-                    else
-                        punchStatus.Text = "Punch failed: " .. tostring(errPunch)
+                    for i = 1, punchCount do
+                        if not farmRunning then break end
+                        local okPunch, errPunch = safeFirePunch(targetX, targetY)
+                        if okPunch then
+                            punchStatus.Text = string.format("Punch: fired %d/%d at (%d,%d)", i, punchCount, targetX, targetY)
+                        else
+                            punchStatus.Text = "Punch failed: " .. tostring(errPunch)
+                        end
+                        wait(punchDelay)
                     end
                 else
                     punchStatus.Text = "Punch: remote not found, retrying..."
