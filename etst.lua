@@ -1,6 +1,6 @@
--- Modern Farm UI (Auto Farm: Place then Punch at the same coordinates)
+-- Modern Farm UI (Place and Punch use identical target coordinates)
 -- Executor-friendly, scrollable, draggable, minimize & close
--- Behavior: each Place action is immediately followed by a Punch at the same target tile
+-- Behavior: each Place action is immediately followed by a Punch at the exact same tile coordinates
 -- Paste as LocalScript or run in your APK executor. Sesuaikan nama remote jika perlu.
 
 local Players = game:GetService("Players")
@@ -305,15 +305,15 @@ local function safeFirePunch(tx, ty)
     return ok, err
 end
 
--- Combined Auto Farm logic: Place then Punch at same coordinates
+-- Combined Auto Farm logic: Place then Punch at same coordinates (strictly identical)
 local farmRunning = false
-local punchDelay = 1
+local punchDelay = 0.12 -- short delay to allow server to register placed object before punch
 
 farmBtn.MouseButton1Click:Connect(function()
     farmRunning = not farmRunning
     if farmRunning then
         farmBtn.Text = "⏸ Stop Auto Farm"
-        status.Text = "Status: running auto farm (place -> punch)..."
+        status.Text = "Status: running auto farm (place -> punch same coords)..."
         placeStatus.Text = "Place: starting..."
         punchStatus.Text = "Punch: starting..."
 
@@ -332,10 +332,11 @@ farmBtn.MouseButton1Click:Connect(function()
                     break
                 end
 
-                local targetX = tx
-                local targetY = ty + 1 -- Y +1 di atas tile input
+                -- Define the single canonical target tile used for both actions
+                local targetX = math.floor(tx + 0.5)
+                local targetY = math.floor(ty + 0.5) + 1 -- Y +1 as requested
 
-                -- Attempt place
+                -- Attempt place (use canonical target)
                 if not placeRemote then safeFind() end
                 if placeRemote then
                     local okPlace, errPlace = safeFirePlace(targetX, targetY, id)
@@ -348,7 +349,10 @@ farmBtn.MouseButton1Click:Connect(function()
                     placeStatus.Text = "Place: remote not found, retrying..."
                 end
 
-                -- Immediately attempt punch at the SAME coordinates (targetX, targetY)
+                -- Small, consistent delay to let server process the place before punching
+                wait(punchDelay)
+
+                -- Immediately attempt punch at the EXACT SAME canonical coordinates
                 if not punchRemote then safeFind() end
                 if punchRemote then
                     local okPunch, errPunch = safeFirePunch(targetX, targetY)
@@ -361,6 +365,7 @@ farmBtn.MouseButton1Click:Connect(function()
                     punchStatus.Text = "Punch: remote not found, retrying..."
                 end
 
+                -- Wait the configured delay before next cycle
                 wait(delayMs / 1000)
             end
 
@@ -403,4 +408,4 @@ end)
 
 -- Initial hint
 status.Text = "Status: ready — masukkan Tile X,Y, Item ID lalu Start"
-print("ModernFarmUI: GUI created and running (place -> punch at same coords)")
+print("ModernFarmUI: GUI created and running (place -> punch at identical coords)")
