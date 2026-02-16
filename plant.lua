@@ -1,12 +1,13 @@
--- Auto Plant Executor Script (Fixed: draggable UI + working ScrollingFrame)
--- Paste into your executor. Designed to run client-side (PlayerGui / gethui).
--- Ensure "PlayerPlaceItem" remote exists in ReplicatedStorage.Remotes or ReplicatedStorage.
+-- Auto Plant UI (match Auto Farm UI look) + improved teleport attempts for executors
+-- Minimal behavior: UI only (Start/Stop Auto Plant). Teleport logic retried and verified.
+-- Paste as LocalScript in executor (supports gethui/syn). Adjust remote name if needed.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
+-- Get LocalPlayer (some executors need a short wait)
 local player = Players.LocalPlayer
 if not player then
     for i = 1, 30 do
@@ -16,14 +17,14 @@ if not player then
     end
 end
 
--- find place remote
+-- Remote lookup (adjust path/name if your game uses different)
 local function findPlaceRemote()
     local root = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
     return root and root:FindFirstChild("PlayerPlaceItem")
 end
 local placeRemote = findPlaceRemote()
 
--- choose GUI parent (executor-friendly)
+-- Choose GUI parent (executor-friendly)
 local function chooseGuiParent()
     if player and player:FindFirstChild("PlayerGui") then
         return player.PlayerGui
@@ -36,49 +37,75 @@ local function chooseGuiParent()
 end
 local guiParent = chooseGuiParent()
 
--- create ScreenGui
-local screen = Instance.new("ScreenGui")
-screen.Name = "AutoPlantExecutorGui"
-screen.ResetOnSpawn = false
-screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screen.Parent = guiParent
-
--- protect gui if executor supports it
-if type(syn) == "table" and type(syn.protect_gui) == "function" then
-    pcall(function() syn.protect_gui(screen) end)
+-- Create ScreenGui
+local okGui, gui = pcall(function()
+    local g = Instance.new("ScreenGui")
+    g.Name = "AutoPlantUI"
+    g.ResetOnSpawn = false
+    g.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    g.Parent = guiParent
+    return g
+end)
+if not okGui or not gui then
+    warn("AutoPlantUI: failed to create GUI parent.")
+    return
 end
 
--- Main window
-local window = Instance.new("Frame")
-window.Name = "Window"
-window.Size = UDim2.new(0, 360, 0, 220)
-window.Position = UDim2.new(0, 20, 0, 80)
-window.BackgroundColor3 = Color3.fromRGB(24, 26, 32)
-window.BorderSizePixel = 0
-window.AnchorPoint = Vector2.new(0,0)
-window.Parent = screen
-window.Active = true -- required for dragging on some clients
-window.ClipsDescendants = true
+-- Protect GUI if executor supports it
+if type(syn) == "table" and type(syn.protect_gui) == "function" then
+    pcall(function() syn.protect_gui(gui) end)
+end
 
--- Title bar (drag handle)
-local titleBar = Instance.new("Frame", window)
-titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 36)
-titleBar.Position = UDim2.new(0, 0, 0, 0)
-titleBar.BackgroundColor3 = Color3.fromRGB(28, 30, 36)
-titleBar.BorderSizePixel = 0
+-- Panel sizes (match Auto Farm style)
+local PANEL_WIDTH, PANEL_HEIGHT = 380, 320
+local PANEL_MIN_HEIGHT = 40
 
-local titleLabel = Instance.new("TextLabel", titleBar)
-titleLabel.Size = UDim2.new(1, -80, 1, 0)
-titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Auto Plant (Executor)"
-titleLabel.TextColor3 = Color3.fromRGB(235,235,240)
-titleLabel.Font = Enum.Font.SourceSansBold
-titleLabel.TextSize = 16
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+local panel = Instance.new("Frame")
+panel.Name = "Panel"
+panel.Size = UDim2.new(0, PANEL_WIDTH, 0, PANEL_HEIGHT)
+panel.Position = UDim2.new(0.03, 0, 0.12, 0)
+panel.BackgroundColor3 = Color3.fromRGB(18, 20, 25)
+panel.BorderSizePixel = 0
+panel.AnchorPoint = Vector2.new(0,0)
+panel.Parent = gui
+panel.Active = true
+panel.ClipsDescendants = true
+panel.ZIndex = 2
+panel.Visible = true
 
-local closeBtn = Instance.new("TextButton", titleBar)
+-- Drag bar
+local dragBar = Instance.new("Frame", panel)
+dragBar.Name = "DragBar"
+dragBar.Size = UDim2.new(1, 0, 0, 36)
+dragBar.Position = UDim2.new(0, 0, 0, 0)
+dragBar.BackgroundColor3 = Color3.fromRGB(24, 26, 32)
+dragBar.BorderSizePixel = 0
+dragBar.ZIndex = 3
+
+local dragTitle = Instance.new("TextLabel", dragBar)
+dragTitle.Size = UDim2.new(1, -100, 1, 0)
+dragTitle.Position = UDim2.new(0, 12, 0, 0)
+dragTitle.BackgroundTransparency = 1
+dragTitle.Text = "Harvest Studio"
+dragTitle.TextColor3 = Color3.fromRGB(235,235,240)
+dragTitle.Font = Enum.Font.SourceSansBold
+dragTitle.TextSize = 16
+dragTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local minimizeBtn = Instance.new("TextButton", dragBar)
+minimizeBtn.Name = "Minimize"
+minimizeBtn.Size = UDim2.new(0, 28, 0, 24)
+minimizeBtn.Position = UDim2.new(1, -72, 0, 6)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(120,120,120)
+minimizeBtn.Text = "—"
+minimizeBtn.Font = Enum.Font.SourceSansBold
+minimizeBtn.TextSize = 18
+minimizeBtn.TextColor3 = Color3.fromRGB(255,255,255)
+minimizeBtn.AutoButtonColor = false
+minimizeBtn.ZIndex = 4
+
+local closeBtn = Instance.new("TextButton", dragBar)
+closeBtn.Name = "Close"
 closeBtn.Size = UDim2.new(0, 28, 0, 24)
 closeBtn.Position = UDim2.new(1, -36, 0, 6)
 closeBtn.BackgroundColor3 = Color3.fromRGB(200,60,60)
@@ -86,51 +113,81 @@ closeBtn.Text = "X"
 closeBtn.Font = Enum.Font.SourceSansBold
 closeBtn.TextSize = 14
 closeBtn.TextColor3 = Color3.fromRGB(255,255,255)
-closeBtn.BorderSizePixel = 0
 closeBtn.AutoButtonColor = false
+closeBtn.ZIndex = 4
 
-closeBtn.MouseButton1Click:Connect(function()
-    pcall(function() screen:Destroy() end)
+-- Drag logic
+local dragging, dragInput, dragStart, startPos = false, nil, nil, nil
+local function updatePosition(input)
+    local delta = input.Position - dragStart
+    panel.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+dragBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = panel.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+dragBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging and dragStart then
+        updatePosition(input)
+    end
 end)
 
--- Scrolling content area
-local content = Instance.new("ScrollingFrame", window)
-content.Name = "Content"
-content.Size = UDim2.new(1, -12, 1, -48)
-content.Position = UDim2.new(0, 6, 0, 42)
+closeBtn.MouseButton1Click:Connect(function()
+    pcall(function() gui:Destroy() end)
+end)
+
+-- Content (scrollable) - ensure scrolling works like Auto Farm
+local content = Instance.new("ScrollingFrame", panel)
+content.Name = "ContentScroll"
+content.Size = UDim2.new(1, -24, 1, -72)
+content.Position = UDim2.new(0, 12, 0, 60)
 content.BackgroundTransparency = 1
-content.ScrollBarThickness = 8
+content.ScrollBarThickness = 6
 content.CanvasSize = UDim2.new(0, 0, 0, 0)
 content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 content.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
-content.ScrollBarImageColor3 = Color3.fromRGB(120,120,130)
-content.Active = true -- important so mouse wheel works reliably
-content.Parent = window
+content.ScrollBarImageColor3 = Color3.fromRGB(100,100,110)
+content.Visible = true
+content.ZIndex = 2
+content.Active = true -- important for mouse wheel
 
-local layout = Instance.new("UIListLayout", content)
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UDim.new(0, 8)
+local listLayout = Instance.new("UIListLayout", content)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 8)
 
-local padding = Instance.new("UIPadding", content)
-padding.PaddingTop = UDim.new(0, 6)
-padding.PaddingBottom = UDim.new(0, 6)
-padding.PaddingLeft = UDim.new(0, 6)
-padding.PaddingRight = UDim.new(0, 6)
+local pad = Instance.new("UIPadding", content)
+pad.PaddingTop = UDim.new(0, 6)
+pad.PaddingBottom = UDim.new(0, 6)
+pad.PaddingLeft = UDim.new(0, 6)
+pad.PaddingRight = UDim.new(0, 6)
 
--- ensure CanvasSize updates when content changes
-layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    content.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 12)
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local sizeY = listLayout.AbsoluteContentSize.Y + 12
+    content.CanvasSize = UDim2.new(0, 0, 0, sizeY)
 end)
 
--- Helper to create labeled textbox rows inside scrolling frame
+-- Helper to create labeled textbox inside scrolling frame
 local function labeledTextbox(parent, labelText, layoutOrder, placeholder, default)
     local container = Instance.new("Frame", parent)
-    container.Size = UDim2.new(1, 0, 0, 56)
+    container.Size = UDim2.new(1, -12, 0, 64)
     container.BackgroundTransparency = 1
     container.LayoutOrder = layoutOrder
 
     local lbl = Instance.new("TextLabel", container)
-    lbl.Size = UDim2.new(0, 140, 0, 20)
+    lbl.Size = UDim2.new(1, 0, 0, 20)
     lbl.Position = UDim2.new(0, 0, 0, 0)
     lbl.BackgroundTransparency = 1
     lbl.Text = labelText
@@ -140,8 +197,8 @@ local function labeledTextbox(parent, labelText, layoutOrder, placeholder, defau
     lbl.TextXAlignment = Enum.TextXAlignment.Left
 
     local box = Instance.new("TextBox", container)
-    box.Size = UDim2.new(1, -4, 0, 30)
-    box.Position = UDim2.new(0, 0, 0, 24)
+    box.Size = UDim2.new(1, 0, 0, 34)
+    box.Position = UDim2.new(0, 0, 0, 26)
     box.BackgroundColor3 = Color3.fromRGB(28,30,36)
     box.TextColor3 = Color3.fromRGB(230,230,235)
     box.PlaceholderText = placeholder or ""
@@ -154,84 +211,68 @@ local function labeledTextbox(parent, labelText, layoutOrder, placeholder, defau
     return box, container
 end
 
--- Inputs
-local tpXBox = labeledTextbox(content, "Teleport World X", 1, "e.g. 2", "2")
-local tpZBox = labeledTextbox(content, "Teleport World Z", 2, "e.g. 37", "37")
-local tileXBox = labeledTextbox(content, "Tile X (base)", 3, "e.g. 2", "2")
-local tileYBox = labeledTextbox(content, "Tile Y (base)", 4, "e.g. 37", "37")
-local idBox    = labeledTextbox(content, "Item ID (seed)", 5, "e.g. 10", "10")
+-- Inputs (match Auto Farm UI fields)
+local tileXBox = labeledTextbox(content, "Tile X (base)", 1, "e.g. 2", "2")
+local tileYBox = labeledTextbox(content, "Tile Y (base)", 2, "e.g. 37", "37")
+local idBox = labeledTextbox(content, "Item ID (seed)", 3, "e.g. 10", "10")
+local delayBox = labeledTextbox(content, "Delay (ms)", 4, "e.g. 1000", "1000")
+local punchCountBox = labeledTextbox(content, "Punch Count", 5, "e.g. 1", "1")
 local seedCountBox = labeledTextbox(content, "Seed Count", 6, "e.g. 10", "10")
 
--- Buttons row
-local buttonsFrame = Instance.new("Frame", content)
-buttonsFrame.Size = UDim2.new(1, 0, 0, 40)
-buttonsFrame.BackgroundTransparency = 1
-buttonsFrame.LayoutOrder = 7
+-- Spacer
+local spacer = Instance.new("Frame", content)
+spacer.Size = UDim2.new(1, 0, 0, 6)
+spacer.BackgroundTransparency = 1
+spacer.LayoutOrder = 7
 
-local startBtn = Instance.new("TextButton", buttonsFrame)
-startBtn.Size = UDim2.new(0.5, -6, 1, 0)
-startBtn.Position = UDim2.new(0, 0, 0, 0)
-startBtn.BackgroundColor3 = Color3.fromRGB(120,200,120)
-startBtn.Text = "▶ Start Auto Plant"
-startBtn.Font = Enum.Font.SourceSansBold
-startBtn.TextSize = 14
-startBtn.TextColor3 = Color3.fromRGB(18,20,25)
-startBtn.BorderSizePixel = 0
+-- Start Auto Plant button (only control requested)
+local plantContainer = Instance.new("Frame", content)
+plantContainer.Size = UDim2.new(1, -12, 0, 56)
+plantContainer.BackgroundTransparency = 1
+plantContainer.LayoutOrder = 8
 
-local stopBtn = Instance.new("TextButton", buttonsFrame)
-stopBtn.Size = UDim2.new(0.5, -6, 1, 0)
-stopBtn.Position = UDim2.new(0.5, 12, 0, 0)
-stopBtn.BackgroundColor3 = Color3.fromRGB(200,120,120)
-stopBtn.Text = "■ Stop"
-stopBtn.Font = Enum.Font.SourceSansBold
-stopBtn.TextSize = 14
-stopBtn.TextColor3 = Color3.fromRGB(18,20,25)
-stopBtn.BorderSizePixel = 0
+local plantBtn = Instance.new("TextButton", plantContainer)
+plantBtn.Size = UDim2.new(1, 0, 1, 0)
+plantBtn.Position = UDim2.new(0, 0, 0, 0)
+plantBtn.BackgroundColor3 = Color3.fromRGB(120,200,120)
+plantBtn.TextColor3 = Color3.fromRGB(18,20,25)
+plantBtn.Font = Enum.Font.SourceSansBold
+plantBtn.TextSize = 16
+plantBtn.Text = "▶ Start Auto Plant"
+plantBtn.AutoButtonColor = false
+plantBtn.BorderSizePixel = 0
 
-local statusLabel = Instance.new("TextLabel", content)
-statusLabel.Size = UDim2.new(1, 0, 0, 20)
-statusLabel.BackgroundTransparency = 1
-statusLabel.LayoutOrder = 8
-statusLabel.Text = "Status: idle"
-statusLabel.TextColor3 = Color3.fromRGB(160,200,255)
-statusLabel.Font = Enum.Font.SourceSans
-statusLabel.TextSize = 12
-statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+-- Status label
+local status = Instance.new("TextLabel", content)
+status.Size = UDim2.new(1, -12, 0, 20)
+status.BackgroundTransparency = 1
+status.LayoutOrder = 9
+status.Text = "Status: idle"
+status.TextColor3 = Color3.fromRGB(160,200,255)
+status.Font = Enum.Font.SourceSans
+status.TextSize = 12
+status.TextXAlignment = Enum.TextXAlignment.Left
 
--- Dragging logic for titleBar/window
-local dragging = false
-local dragStart = nil
-local startPos = nil
-titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = window.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-titleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        -- nothing here; handled by UserInputService.InputChanged
-    end
-end)
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and dragStart and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = input.Position - dragStart
-        window.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-    end
-end)
+-- Safe remote helpers
+local function safeFind()
+    placeRemote = findPlaceRemote()
+end
 
--- Helper: wait for HRP
+local function safeFirePlace(tx, ty, id)
+    if not placeRemote then safeFind() end
+    if not placeRemote then return false, "Place remote not found" end
+    local ok, err = pcall(function()
+        placeRemote:FireServer(Vector2.new(tx, ty), tonumber(id))
+    end)
+    return ok, err
+end
+
+-- Teleport helpers: wait for HRP, attempt teleport multiple times and verify
 local function waitForHRP(timeout)
     timeout = timeout or 5
     local t0 = tick()
     while tick() - t0 < timeout do
-        local char = player.Character
+        local char = player and player.Character
         if char then
             local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
             if hrp then return hrp end
@@ -241,101 +282,163 @@ local function waitForHRP(timeout)
     return nil
 end
 
--- Safe teleport (set Y to safe height 50)
-local function safeTeleportToWorld(x, z)
-    local hrp = waitForHRP(5)
-    if not hrp then return false, "HumanoidRootPart not found" end
+local function tryTeleport(hrp, targetCFrame)
     local ok, err = pcall(function()
-        hrp.CFrame = CFrame.new(tonumber(x) or 2, 50, tonumber(z) or 37)
-    end)
-    if not ok then return false, tostring(err) end
-    return true
-end
-
--- Safe place call
-local function safePlace(tx, ty, id)
-    if not placeRemote then placeRemote = findPlaceRemote() end
-    if not placeRemote then return false, "place remote not found" end
-    local ok, err = pcall(function()
-        placeRemote:FireServer(Vector2.new(tx, ty), tonumber(id))
+        hrp.CFrame = targetCFrame
     end)
     return ok, err
 end
 
--- Main planting logic
-local running = false
-local plantThread = nil
+local function teleportAndVerify(worldX, worldZ, attempts, safeY)
+    attempts = attempts or 5
+    safeY = safeY or 50
+    local hrp = waitForHRP(5)
+    if not hrp then return false, "HumanoidRootPart not found" end
 
-startBtn.MouseButton1Click:Connect(function()
-    if running then return end
-    running = true
-    startBtn.Text = "⏸ Running..."
-    statusLabel.Text = "Status: preparing..."
+    local targetPos = Vector3.new(tonumber(worldX) or 2, safeY, tonumber(worldZ) or 37)
+    local targetCFrame = CFrame.new(targetPos)
 
-    local tpX = tonumber(tpXBox.Text) or 2
-    local tpZ = tonumber(tpZBox.Text) or 37
-    local baseTileX = tonumber(tileXBox.Text) or 2
-    local baseTileY = tonumber(tileYBox.Text) or 37
-    local id = tonumber(idBox.Text)
-    local seedCount = tonumber(seedCountBox.Text) or 1
-    if seedCount < 1 then seedCount = 1 end
-    if not id then
-        statusLabel.Text = "Status: invalid Item ID"
-        running = false
-        startBtn.Text = "▶ Start Auto Plant"
-        return
-    end
-
-    -- teleport
-    statusLabel.Text = string.format("Status: teleporting to (%.1f, %.1f)...", tpX, tpZ)
-    local ok, err = safeTeleportToWorld(tpX, tpZ)
-    if not ok then
-        statusLabel.Text = "Teleport failed: " .. tostring(err)
-        running = false
-        startBtn.Text = "▶ Start Auto Plant"
-        return
-    end
-
-    statusLabel.Text = "Status: planting..."
-    plantThread = spawn(function()
-        for i = 1, seedCount do
-            if not running then break end
-            local targetTileX = math.floor(baseTileX + (i - 1) + 0.5)
-            local targetTileY = math.floor(baseTileY + 0.5) + 1
-            local okPlace, errPlace = safePlace(targetTileX, targetTileY, id)
-            if okPlace then
-                statusLabel.Text = string.format("Placed %d/%d at (%d,%d)", i, seedCount, targetTileX, targetTileY)
-            else
-                statusLabel.Text = "Place failed: " .. tostring(errPlace)
-            end
-            -- move HRP slightly forward to mimic walking (best-effort)
-            pcall(function()
-                local hrp = waitForHRP(1)
-                if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(1, 0, 0) end
-            end)
-            wait(0.25)
+    for i = 1, attempts do
+        local ok, err = tryTeleport(hrp, targetCFrame)
+        wait(0.08)
+        -- verify position is close to target (within small threshold)
+        local curPos = hrp.Position
+        local dx = math.abs(curPos.X - targetPos.X)
+        local dz = math.abs(curPos.Z - targetPos.Z)
+        if dx <= 1.5 and dz <= 1.5 then
+            return true
         end
-        statusLabel.Text = "Status: finished"
-        running = false
-        startBtn.Text = "▶ Start Auto Plant"
-    end)
-end)
+        -- retry: small upward nudge to avoid being stuck in geometry
+        pcall(function()
+            hrp.CFrame = CFrame.new(targetPos.X, safeY + 2, targetPos.Z)
+        end)
+        wait(0.08)
+    end
 
-stopBtn.MouseButton1Click:Connect(function()
-    if not running then return end
-    running = false
-    statusLabel.Text = "Status: stopping..."
-    startBtn.Text = "▶ Start Auto Plant"
-end)
+    -- final check
+    local curPos = hrp.Position
+    local dx = math.abs(curPos.X - targetPos.X)
+    local dz = math.abs(curPos.Z - targetPos.Z)
+    if dx <= 1.5 and dz <= 1.5 then
+        return true
+    end
+    return false, "teleport verification failed"
+end
 
--- Ensure ScrollingFrame responds to mouse wheel on some clients:
--- When mouse is over the content area, capture input and forward to ScrollingFrame
-content.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseWheel then
-        -- handled by ScrollingFrame automatically; nothing required
+-- Planting logic: teleport then place seeds along +X
+local plantRunning = false
+local punchDelay = 0.12
+
+plantBtn.MouseButton1Click:Connect(function()
+    plantRunning = not plantRunning
+    if plantRunning then
+        plantBtn.Text = "⏸ Stop Auto Plant"
+        status.Text = "Status: preparing auto plant..."
+        spawn(function()
+            -- read inputs
+            local baseTileX = tonumber(tileXBox.Text) or 2
+            local baseTileY = tonumber(tileYBox.Text) or 37
+            local id = tonumber(idBox.Text)
+            local delayMs = tonumber(delayBox.Text) or 1000
+            local punchCount = tonumber(punchCountBox.Text) or 1
+            local seedCount = tonumber(seedCountBox.Text) or 1
+            if seedCount < 1 then seedCount = 1 end
+            if punchCount < 1 then punchCount = 1 end
+            if not id then
+                status.Text = "Status: invalid Item ID"
+                plantRunning = false
+                plantBtn.Text = "▶ Start Auto Plant"
+                return
+            end
+
+            -- Teleport world coords: interpret tile->world separately; default teleport to (2,37) world as requested
+            status.Text = "Status: teleporting to (2,37)..."
+            local ok, err = teleportAndVerify(2, 37, 6, 50)
+            if not ok then
+                status.Text = "Teleport failed: " .. tostring(err)
+                plantRunning = false
+                plantBtn.Text = "▶ Start Auto Plant"
+                return
+            end
+
+            status.Text = "Status: teleported. Starting planting..."
+            for i = 1, seedCount do
+                if not plantRunning then break end
+                local targetTileX = math.floor(baseTileX + (i - 1) + 0.5)
+                local targetTileY = math.floor(baseTileY + 0.5) + 1 -- Y+1 mapping
+                -- Place
+                if not placeRemote then safeFind() end
+                if placeRemote then
+                    local okPlace, errPlace = safeFirePlace(targetTileX, targetTileY, id)
+                    if okPlace then
+                        status.Text = string.format("Placed %d/%d at (%d,%d)", i, seedCount, targetTileX, targetTileY)
+                    else
+                        status.Text = "Place failed: " .. tostring(errPlace)
+                    end
+                else
+                    status.Text = "Place remote not found"
+                end
+
+                -- optional small movement to mimic walking and help server accept place
+                pcall(function()
+                    local hrp = waitForHRP(0.5)
+                    if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(1, 0, 0) end
+                end)
+
+                -- small pause between place and optional punches (if you want to use punchCount)
+                wait(punchDelay)
+
+                -- perform punches if desired (kept but harmless if remote missing)
+                if punchCount and punchCount > 0 then
+                    for p = 1, punchCount do
+                        if not plantRunning then break end
+                        if not placeRemote then safeFind() end
+                        -- try to use punch remote if exists (best-effort)
+                        if placeRemote and ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("PlayerFist") then
+                            local punchRemote = ReplicatedStorage.Remotes:FindFirstChild("PlayerFist")
+                            pcall(function() punchRemote:FireServer(Vector2.new(targetTileX, targetTileY)) end)
+                        end
+                        wait(punchDelay)
+                    end
+                end
+
+                wait((delayMs or 1000) / 1000)
+            end
+
+            status.Text = "Status: finished planting"
+            plantRunning = false
+            plantBtn.Text = "▶ Start Auto Plant"
+        end)
+    else
+        plantBtn.Text = "▶ Start Auto Plant"
+        status.Text = "Status: stopping..."
+        plantRunning = false
     end
 end)
 
--- Finalize
-statusLabel.Text = "Status: ready"
-print("AutoPlantExecutorGui loaded (draggable + scrollable)")
+-- Minimize behavior
+local minimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        content.Visible = false
+        panel.Size = UDim2.new(0, PANEL_WIDTH, 0, PANEL_MIN_HEIGHT)
+        dragTitle.Text = "Harvest Studio (minimized)"
+        minimizeBtn.Text = "+"
+        minimizeBtn.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    else
+        content.Visible = true
+        panel.Size = UDim2.new(0, PANEL_WIDTH, 0, PANEL_HEIGHT)
+        dragTitle.Text = "Harvest Studio"
+        minimizeBtn.Text = "—"
+        minimizeBtn.BackgroundColor3 = Color3.fromRGB(120,120,120)
+    end
+end)
+
+-- Cleanup
+gui.Destroying:Connect(function()
+    plantRunning = false
+end)
+
+status.Text = "Status: ready — masukkan Tile X,Y, Item ID, Seed Count lalu Start"
+print("AutoPlantUI loaded (UI matches Auto Farm; improved teleport attempts)")
