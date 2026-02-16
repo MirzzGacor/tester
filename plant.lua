@@ -1,5 +1,6 @@
--- Auto Plant UI (match Auto Farm UI look) + improved teleport attempts for executors
--- Minimal behavior: UI only (Start/Stop Auto Plant). Teleport logic retried and verified.
+-- AutoPlantUI (no Punch Count)
+-- UI matches Auto Farm style. Auto Plant: teleport then place seeds along +X.
+-- Punch Count removed entirely from UI and logic.
 -- Paste as LocalScript in executor (supports gethui/syn). Adjust remote name if needed.
 
 local Players = game:GetService("Players")
@@ -211,25 +212,24 @@ local function labeledTextbox(parent, labelText, layoutOrder, placeholder, defau
     return box, container
 end
 
--- Inputs (match Auto Farm UI fields)
+-- Inputs (match Auto Farm UI fields, Punch Count removed)
 local tileXBox = labeledTextbox(content, "Tile X (base)", 1, "e.g. 2", "2")
 local tileYBox = labeledTextbox(content, "Tile Y (base)", 2, "e.g. 37", "37")
 local idBox = labeledTextbox(content, "Item ID (seed)", 3, "e.g. 10", "10")
 local delayBox = labeledTextbox(content, "Delay (ms)", 4, "e.g. 1000", "1000")
-local punchCountBox = labeledTextbox(content, "Punch Count", 5, "e.g. 1", "1")
-local seedCountBox = labeledTextbox(content, "Seed Count", 6, "e.g. 10", "10")
+local seedCountBox = labeledTextbox(content, "Seed Count", 5, "e.g. 10", "10")
 
 -- Spacer
 local spacer = Instance.new("Frame", content)
 spacer.Size = UDim2.new(1, 0, 0, 6)
 spacer.BackgroundTransparency = 1
-spacer.LayoutOrder = 7
+spacer.LayoutOrder = 6
 
 -- Start Auto Plant button (only control requested)
 local plantContainer = Instance.new("Frame", content)
 plantContainer.Size = UDim2.new(1, -12, 0, 56)
 plantContainer.BackgroundTransparency = 1
-plantContainer.LayoutOrder = 8
+plantContainer.LayoutOrder = 7
 
 local plantBtn = Instance.new("TextButton", plantContainer)
 plantBtn.Size = UDim2.new(1, 0, 1, 0)
@@ -246,7 +246,7 @@ plantBtn.BorderSizePixel = 0
 local status = Instance.new("TextLabel", content)
 status.Size = UDim2.new(1, -12, 0, 20)
 status.BackgroundTransparency = 1
-status.LayoutOrder = 9
+status.LayoutOrder = 8
 status.Text = "Status: idle"
 status.TextColor3 = Color3.fromRGB(160,200,255)
 status.Font = Enum.Font.SourceSans
@@ -289,45 +289,59 @@ local function tryTeleport(hrp, targetCFrame)
     return ok, err
 end
 
+local function isClose(posA, posB, tol)
+    tol = tol or 1.5
+    return (math.abs(posA.X - posB.X) <= tol) and (math.abs(posA.Z - posB.Z) <= tol)
+end
+
 local function teleportAndVerify(worldX, worldZ, attempts, safeY)
     attempts = attempts or 5
     safeY = safeY or 50
-    local hrp = waitForHRP(5)
-    if not hrp then return false, "HumanoidRootPart not found" end
+    local hrp = waitForHRP(6)
+    local humanoid = nil
+    if player and player.Character then
+        humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+    end
+    if not hrp then return false, "HumanoidRootPart not found (character not ready)" end
 
     local targetPos = Vector3.new(tonumber(worldX) or 2, safeY, tonumber(worldZ) or 37)
     local targetCFrame = CFrame.new(targetPos)
 
     for i = 1, attempts do
-        local ok, err = tryTeleport(hrp, targetCFrame)
-        wait(0.08)
-        -- verify position is close to target (within small threshold)
-        local curPos = hrp.Position
-        local dx = math.abs(curPos.X - targetPos.X)
-        local dz = math.abs(curPos.Z - targetPos.Z)
-        if dx <= 1.5 and dz <= 1.5 then
-            return true
+        -- direct set
+        pcall(function() hrp.CFrame = targetCFrame end)
+        wait(0.12)
+        if isClose(hrp.Position, targetPos) then return true end
+
+        -- try humanoid state then set
+        if humanoid then
+            pcall(function() humanoid:ChangeState(Enum.HumanoidStateType.Physics) end)
+            wait(0.06)
+            pcall(function() hrp.CFrame = targetCFrame end)
+            wait(0.12)
+            if isClose(hrp.Position, targetPos) then return true end
         end
-        -- retry: small upward nudge to avoid being stuck in geometry
+
+        -- try MoveTo
         pcall(function()
-            hrp.CFrame = CFrame.new(targetPos.X, safeY + 2, targetPos.Z)
+            local char = player.Character
+            if char then char:MoveTo(targetPos) end
         end)
-        wait(0.08)
+        wait(0.25)
+        if isClose(hrp.Position, targetPos) then return true end
+
+        -- upward nudge
+        pcall(function() hrp.CFrame = CFrame.new(targetPos.X, safeY + 3, targetPos.Z) end)
+        wait(0.12)
+        if isClose(hrp.Position, targetPos) then return true end
     end
 
-    -- final check
-    local curPos = hrp.Position
-    local dx = math.abs(curPos.X - targetPos.X)
-    local dz = math.abs(curPos.Z - targetPos.Z)
-    if dx <= 1.5 and dz <= 1.5 then
-        return true
-    end
-    return false, "teleport verification failed"
+    if isClose(hrp.Position, targetPos) then return true end
+    return false, "teleport verification failed (server may override client movement)"
 end
 
--- Planting logic: teleport then place seeds along +X
+-- Planting logic: teleport then place seeds along +X (no punching)
 local plantRunning = false
-local punchDelay = 0.12
 
 plantBtn.MouseButton1Click:Connect(function()
     plantRunning = not plantRunning
@@ -340,10 +354,8 @@ plantBtn.MouseButton1Click:Connect(function()
             local baseTileY = tonumber(tileYBox.Text) or 37
             local id = tonumber(idBox.Text)
             local delayMs = tonumber(delayBox.Text) or 1000
-            local punchCount = tonumber(punchCountBox.Text) or 1
             local seedCount = tonumber(seedCountBox.Text) or 1
             if seedCount < 1 then seedCount = 1 end
-            if punchCount < 1 then punchCount = 1 end
             if not id then
                 status.Text = "Status: invalid Item ID"
                 plantRunning = false
@@ -351,7 +363,7 @@ plantBtn.MouseButton1Click:Connect(function()
                 return
             end
 
-            -- Teleport world coords: interpret tile->world separately; default teleport to (2,37) world as requested
+            -- Teleport world coords: default to (2,37) as requested
             status.Text = "Status: teleporting to (2,37)..."
             local ok, err = teleportAndVerify(2, 37, 6, 50)
             if not ok then
@@ -366,6 +378,7 @@ plantBtn.MouseButton1Click:Connect(function()
                 if not plantRunning then break end
                 local targetTileX = math.floor(baseTileX + (i - 1) + 0.5)
                 local targetTileY = math.floor(baseTileY + 0.5) + 1 -- Y+1 mapping
+
                 -- Place
                 if not placeRemote then safeFind() end
                 if placeRemote then
@@ -384,23 +397,6 @@ plantBtn.MouseButton1Click:Connect(function()
                     local hrp = waitForHRP(0.5)
                     if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(1, 0, 0) end
                 end)
-
-                -- small pause between place and optional punches (if you want to use punchCount)
-                wait(punchDelay)
-
-                -- perform punches if desired (kept but harmless if remote missing)
-                if punchCount and punchCount > 0 then
-                    for p = 1, punchCount do
-                        if not plantRunning then break end
-                        if not placeRemote then safeFind() end
-                        -- try to use punch remote if exists (best-effort)
-                        if placeRemote and ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("PlayerFist") then
-                            local punchRemote = ReplicatedStorage.Remotes:FindFirstChild("PlayerFist")
-                            pcall(function() punchRemote:FireServer(Vector2.new(targetTileX, targetTileY)) end)
-                        end
-                        wait(punchDelay)
-                    end
-                end
 
                 wait((delayMs or 1000) / 1000)
             end
@@ -441,4 +437,4 @@ gui.Destroying:Connect(function()
 end)
 
 status.Text = "Status: ready — masukkan Tile X,Y, Item ID, Seed Count lalu Start"
-print("AutoPlantUI loaded (UI matches Auto Farm; improved teleport attempts)")
+print("AutoPlantUI loaded (Punch Count removed)")
