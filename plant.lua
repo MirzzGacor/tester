@@ -1,6 +1,9 @@
--- Auto Plant Executor Script (Minimal UI: hanya Start Auto Plant)
--- Cara pakai: masukkan nilai di textbox lalu klik Start. Script ini dirancang untuk executor (syn/gethui).
--- Pastikan nama remote "PlayerPlaceItem" ada di ReplicatedStorage.Remotes atau ReplicatedStorage.
+-- Auto Plant minimal: hanya tombol Start Auto Plant
+-- Behavior:
+-- 1) Teleport player ke world coords (2, 50, 37) untuk keamanan
+-- 2) Place seed pada tile base (tileX, tileY) lalu maju +1 X per seed sampai SeedCount habis
+-- 3) Hanya satu tombol Start/Stop; status sederhana di layar
+-- Paste sebagai LocalScript (PlayerGui)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,7 +18,7 @@ if not player then
     end
 end
 
--- cari remote place (cari di ReplicatedStorage.Remotes dulu, lalu fallback ke root)
+-- cari remote place (sesuaikan path jika berbeda)
 local function findPlaceRemote()
     local root = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
     return root and root:FindFirstChild("PlayerPlaceItem")
@@ -23,60 +26,42 @@ end
 
 local placeRemote = findPlaceRemote()
 
--- GUI minimal (executor-friendly)
-local parentGui = nil
-if player and player:FindFirstChild("PlayerGui") then
-    parentGui = player.PlayerGui
-elseif type(gethui) == "function" then
-    pcall(function() parentGui = gethui() end)
-end
-if not parentGui then
-    parentGui = game:GetService("CoreGui")
-end
-
+-- GUI minimal
 local screen = Instance.new("ScreenGui")
-screen.Name = "AutoPlantExecutorGui"
+screen.Name = "AutoPlantSimpleGui"
 screen.ResetOnSpawn = false
-screen.Parent = parentGui
-
-if type(syn) == "table" and type(syn.protect_gui) == "function" then
-    pcall(function() syn.protect_gui(screen) end)
-end
+screen.Parent = player:FindFirstChild("PlayerGui") or game:GetService("CoreGui")
 
 local frame = Instance.new("Frame", screen)
-frame.Size = UDim2.new(0, 320, 0, 180)
+frame.Size = UDim2.new(0, 300, 0, 140)
 frame.Position = UDim2.new(0, 20, 0, 80)
-frame.BackgroundColor3 = Color3.fromRGB(24, 26, 32)
+frame.BackgroundColor3 = Color3.fromRGB(24,26,32)
 frame.BorderSizePixel = 0
-frame.Active = true
 
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1, -12, 0, 28)
 title.Position = UDim2.new(0, 6, 0, 6)
 title.BackgroundTransparency = 1
-title.Text = "Auto Plant (Executor)"
+title.Text = "Auto Plant (Simple)"
 title.TextColor3 = Color3.fromRGB(235,235,240)
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 16
 title.TextXAlignment = Enum.TextXAlignment.Left
 
-local function makeLabel(y, text)
+local function labeledBox(y, label, default)
     local lbl = Instance.new("TextLabel", frame)
-    lbl.Size = UDim2.new(0, 110, 0, 20)
+    lbl.Size = UDim2.new(0, 100, 0, 20)
     lbl.Position = UDim2.new(0, 8, 0, y)
     lbl.BackgroundTransparency = 1
-    lbl.Text = text
+    lbl.Text = label
     lbl.TextColor3 = Color3.fromRGB(200,200,210)
     lbl.Font = Enum.Font.SourceSans
     lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left
-    return lbl
-end
 
-local function makeBox(y, default)
     local box = Instance.new("TextBox", frame)
-    box.Size = UDim2.new(0, 180, 0, 28)
-    box.Position = UDim2.new(0, 130, 0, y)
+    box.Size = UDim2.new(0, 170, 0, 28)
+    box.Position = UDim2.new(0, 120, 0, y - 4)
     box.BackgroundColor3 = Color3.fromRGB(28,30,36)
     box.TextColor3 = Color3.fromRGB(230,230,235)
     box.Font = Enum.Font.Code
@@ -87,35 +72,17 @@ local function makeBox(y, default)
     return box
 end
 
-makeLabel(40, "Start World X,Z (teleport)")
-local tpXBox = makeBox(36, "2")
-local tpZBox = makeBox(68, "37")
-tpZBox.Position = UDim2.new(0, 130, 0, 68)
-makeLabel(72, "Tile X (base)")
-local tileXBox = makeBox(72, "2")
-tileXBox.Position = UDim2.new(0, 130, 0, 72)
-makeLabel(104, "Tile Y (base)")
-local tileYBox = makeBox(104, "37")
-tileYBox.Position = UDim2.new(0, 130, 0, 104)
-makeLabel(136, "Item ID (seed)")
-local idBox = makeBox(136, "10")
-idBox.Position = UDim2.new(0, 130, 0, 136)
+local tileXBox = labeledBox(40, "Tile X (base)", 2)
+local tileYBox = labeledBox(72, "Tile Y (base)", 37)
+local idBox    = labeledBox(104, "Item ID (seed)", 10)
+local seedCountBox = labeledBox(136, "Seed Count", 10)
 
--- Seed Count and Start button
-local seedCountBox = Instance.new("TextBox", frame)
-seedCountBox.Size = UDim2.new(0, 80, 0, 28)
-seedCountBox.Position = UDim2.new(0, 12, 0, 140)
-seedCountBox.BackgroundColor3 = Color3.fromRGB(28,30,36)
-seedCountBox.TextColor3 = Color3.fromRGB(230,230,235)
-seedCountBox.Font = Enum.Font.Code
-seedCountBox.TextSize = 14
-seedCountBox.Text = "10"
-seedCountBox.ClearTextOnFocus = false
-seedCountBox.BorderSizePixel = 0
+-- Adjust frame height to fit
+frame.Size = UDim2.new(0, 300, 0, 180)
 
 local startBtn = Instance.new("TextButton", frame)
-startBtn.Size = UDim2.new(0, 180, 0, 28)
-startBtn.Position = UDim2.new(0, 110, 0, 140)
+startBtn.Size = UDim2.new(0, 140, 0, 30)
+startBtn.Position = UDim2.new(0, 20, 0, 140)
 startBtn.BackgroundColor3 = Color3.fromRGB(120,200,120)
 startBtn.Text = "▶ Start Auto Plant"
 startBtn.Font = Enum.Font.SourceSansBold
@@ -124,8 +91,8 @@ startBtn.TextColor3 = Color3.fromRGB(18,20,25)
 startBtn.BorderSizePixel = 0
 
 local statusLabel = Instance.new("TextLabel", frame)
-statusLabel.Size = UDim2.new(1, -12, 0, 20)
-statusLabel.Position = UDim2.new(0, 6, 0, 170)
+statusLabel.Size = UDim2.new(0, 120, 0, 30)
+statusLabel.Position = UDim2.new(0, 170, 0, 140)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Status: idle"
 statusLabel.TextColor3 = Color3.fromRGB(160,200,255)
@@ -133,7 +100,7 @@ statusLabel.Font = Enum.Font.SourceSans
 statusLabel.TextSize = 12
 statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- helper: tunggu HRP
+-- helper: tunggu character & HRP
 local function waitForHRP(timeout)
     timeout = timeout or 5
     local t0 = tick()
@@ -143,12 +110,12 @@ local function waitForHRP(timeout)
             local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
             if hrp then return hrp end
         end
-        wait(0.05)
+        wait(0.1)
     end
     return nil
 end
 
--- teleport aman: set X,Z sesuai, Y ke 50 (aman)
+-- teleport aman: set X,Z sesuai, Y ke nilai aman (50)
 local function safeTeleportToWorld(x, z)
     local hrp = waitForHRP(5)
     if not hrp then return false, "HumanoidRootPart not found" end
@@ -169,18 +136,16 @@ local function safePlace(tx, ty, id)
     return ok, err
 end
 
--- main loop
+-- main plant loop
 local running = false
 startBtn.MouseButton1Click:Connect(function()
     running = not running
     if running then
         startBtn.Text = "⏸ Stop Auto Plant"
-        statusLabel.Text = "Status: preparing..."
+        statusLabel.Text = "Status: teleporting..."
         -- read inputs
-        local tpX = tonumber(tpXBox.Text) or 2
-        local tpZ = tonumber(tpZBox.Text) or 37
-        local baseTileX = tonumber(tileXBox.Text) or 2
-        local baseTileY = tonumber(tileYBox.Text) or 37
+        local baseX = tonumber(tileXBox.Text) or 2
+        local baseY = tonumber(tileYBox.Text) or 37
         local id = tonumber(idBox.Text)
         local seedCount = tonumber(seedCountBox.Text) or 1
         if seedCount < 1 then seedCount = 1 end
@@ -191,9 +156,8 @@ startBtn.MouseButton1Click:Connect(function()
             return
         end
 
-        -- teleport
-        statusLabel.Text = string.format("Status: teleporting to (%.1f, %.1f)...", tpX, tpZ)
-        local ok, err = safeTeleportToWorld(tpX, tpZ)
+        -- teleport to safe world coords (2,50,37)
+        local ok, err = safeTeleportToWorld(2, 37)
         if not ok then
             statusLabel.Text = "Teleport failed: " .. tostring(err)
             running = false
@@ -205,8 +169,8 @@ startBtn.MouseButton1Click:Connect(function()
         spawn(function()
             for i = 1, seedCount do
                 if not running then break end
-                local targetTileX = math.floor(baseTileX + (i - 1) + 0.5)
-                local targetTileY = math.floor(baseTileY + 0.5) + 1 -- Y+1 mapping
+                local targetTileX = math.floor(baseX + (i - 1) + 0.5)
+                local targetTileY = math.floor(baseY + 0.5) + 1 -- Y+1 mapping
                 local okPlace, errPlace = safePlace(targetTileX, targetTileY, id)
                 if okPlace then
                     statusLabel.Text = string.format("Placed %d/%d at (%d,%d)", i, seedCount, targetTileX, targetTileY)
