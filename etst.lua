@@ -1,6 +1,6 @@
--- Modern Farm UI (single Start Auto Farm button: starts Auto Place + Auto Punch)
+-- Modern Farm UI (Auto Farm: Place then Punch at the same coordinates)
 -- Executor-friendly, scrollable, draggable, minimize & close
--- Includes robust combined logic so Punch runs reliably
+-- Behavior: each Place action is immediately followed by a Punch at the same target tile
 -- Paste as LocalScript or run in your APK executor. Sesuaikan nama remote jika perlu.
 
 local Players = game:GetService("Players")
@@ -234,7 +234,7 @@ spacer.Size = UDim2.new(1, 0, 0, 6)
 spacer.BackgroundTransparency = 1
 spacer.LayoutOrder = 5
 
--- Single Start Auto Farm button (starts both Place and Punch)
+-- Single Start Auto Farm button (starts both Place and Punch at same coords)
 local farmContainer = Instance.new("Frame", content)
 farmContainer.Size = UDim2.new(1, -12, 0, 56)
 farmContainer.BackgroundTransparency = 1
@@ -305,56 +305,25 @@ local function safeFirePunch(tx, ty)
     return ok, err
 end
 
--- Combined Auto Farm logic (fixed)
+-- Combined Auto Farm logic: Place then Punch at same coordinates
 local farmRunning = false
-local farmThreads = {place = nil, punch = nil}
 local punchDelay = 1
 
 farmBtn.MouseButton1Click:Connect(function()
     farmRunning = not farmRunning
     if farmRunning then
         farmBtn.Text = "⏸ Stop Auto Farm"
-        status.Text = "Status: running auto farm (place + punch)..."
+        status.Text = "Status: running auto farm (place -> punch)..."
         placeStatus.Text = "Place: starting..."
         punchStatus.Text = "Punch: starting..."
 
-        -- Start punch thread FIRST so it runs even if place blocks or errors
-        farmThreads.punch = spawn(function()
-            while farmRunning do
-                -- always attempt to (re)find remote each loop
-                if not punchRemote then
-                    safeFind()
-                end
-                if punchRemote then
-                    local char = player and player.Character
-                    if char and char:FindFirstChild("HumanoidRootPart") then
-                        local root = char.HumanoidRootPart
-                        local tx = math.floor(root.Position.X + 0.5)
-                        local ty = math.floor(root.Position.Y + 0.5)
-                        local ok, err = safeFirePunch(tx, ty)
-                        if ok then
-                            punchStatus.Text = string.format("Punch: fired at (%.0f, %.0f)", tx, ty)
-                        else
-                            punchStatus.Text = "Punch failed: " .. tostring(err)
-                        end
-                    else
-                        punchStatus.Text = "Punch: waiting for character..."
-                    end
-                else
-                    punchStatus.Text = "Punch: remote not found, retrying..."
-                end
-                wait(punchDelay)
-            end
-            punchStatus.Text = "Punch: stopped"
-        end)
-
-        -- Start place thread
-        farmThreads.place = spawn(function()
+        spawn(function()
             while farmRunning do
                 local tx = tonumber(tileXBox.Text)
                 local ty = tonumber(tileYBox.Text)
                 local id = tonumber(idBox.Text)
                 local delayMs = tonumber(delayBox.Text) or 1000
+
                 if not tx or not ty or not id then
                     placeStatus.Text = "Place: invalid input"
                     status.Text = "Status: masukkan Tile X, Tile Y, dan Item ID yang valid."
@@ -362,32 +331,49 @@ farmBtn.MouseButton1Click:Connect(function()
                     farmBtn.Text = "▶ Start Auto Farm"
                     break
                 end
+
                 local targetX = tx
-                local targetY = ty + 1
-                -- ensure placeRemote exists or try to re-find
+                local targetY = ty + 1 -- Y +1 di atas tile input
+
+                -- Attempt place
                 if not placeRemote then safeFind() end
                 if placeRemote then
-                    local ok, err = safeFirePlace(targetX, targetY, id)
-                    if ok then
+                    local okPlace, errPlace = safeFirePlace(targetX, targetY, id)
+                    if okPlace then
                         placeStatus.Text = string.format("Place: placed ID %d at (%d,%d)", id, targetX, targetY)
                     else
-                        placeStatus.Text = "Place failed: " .. tostring(err)
+                        placeStatus.Text = "Place failed: " .. tostring(errPlace)
                     end
                 else
                     placeStatus.Text = "Place: remote not found, retrying..."
                 end
+
+                -- Immediately attempt punch at the SAME coordinates (targetX, targetY)
+                if not punchRemote then safeFind() end
+                if punchRemote then
+                    local okPunch, errPunch = safeFirePunch(targetX, targetY)
+                    if okPunch then
+                        punchStatus.Text = string.format("Punch: fired at (%d,%d)", targetX, targetY)
+                    else
+                        punchStatus.Text = "Punch failed: " .. tostring(errPunch)
+                    end
+                else
+                    punchStatus.Text = "Punch: remote not found, retrying..."
+                end
+
                 wait(delayMs / 1000)
             end
+
             placeStatus.Text = "Place: stopped"
+            punchStatus.Text = "Punch: stopped"
+            status.Text = "Status: idle"
+            farmBtn.Text = "▶ Start Auto Farm"
         end)
 
     else
-        -- stop both loops
         farmBtn.Text = "▶ Start Auto Farm"
         status.Text = "Status: stopping auto farm..."
         farmRunning = false
-        placeStatus.Text = "Place: stopping..."
-        punchStatus.Text = "Punch: stopping..."
     end
 end)
 
@@ -417,4 +403,4 @@ end)
 
 -- Initial hint
 status.Text = "Status: ready — masukkan Tile X,Y, Item ID lalu Start"
-print("ModernFarmUI: GUI created and running (single Start Auto Farm)")
+print("ModernFarmUI: GUI created and running (place -> punch at same coords)")
