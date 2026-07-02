@@ -1,0 +1,157 @@
+
+blockID = 5666
+
+pnbDirection = "UP" -- UP/DOWN
+pnbYOffset = 1 -- = X Block Above/Under The Bot
+
+worldSeparator = "|" -- Separator between World and Door ID
+
+-- Block World For Taking Blocks
+blockWorlds = {
+    "WORLD1|DOORID",
+    "WORLD2|DOORID",
+    "WORLD3|DOORID",
+}
+
+-- Seed World For Saving Seeds; Auto Spread World Already
+seedWorlds = {
+    "WORLD1|DOORID",
+    "WORLD2|DOORID",
+    "WORLD3|DOORID",
+}
+
+-- ===========================[PNB Settings]=========================== 
+
+-- Auto Spread World Already
+pnbWorlds = {
+    "WORLD1|DOORID",
+    "WORLD2|DOORID",
+    "WORLD3|DOORID",
+}
+
+stopScOnMaxGems = false -- Stopping Script on Certain Amount of Gems
+maxDroppedGems = 9999999
+
+-- ========================[Position Settings]========================= 
+
+posDistance = 3 -- Position Distance between each Bot
+
+useBlockAsPosition = false -- Using Block for Positioning, Just Put 1 Block!
+posBlockID = 880
+
+-- ================================[OR]================================ 
+
+posX = 10 -- use Lucifer's Minimap Coordinate
+posY = 23
+
+-- ===========================[PNB Options]============================ 
+
+pnbInHome = false -- PNB in Home / Tutorial World
+whiteListOwner = "youGrowID" -- To Avoid Auto Banned By Bot
+
+
+sleepOnPeopleEntered = false -- Auto Sleep When People Join World, Only For SL
+
+-- ===========================[Bot Settings]=========================== 
+
+maxSeedInBP = 50 -- Max Seed in Backpack before Dropping
+
+moveRange = 6
+moveInterval = 235
+
+breakTile = 3 -- 1-5
+ignoreGems = false
+autoCollect = true
+collectRange = 3 -- 1-10
+showAnimation = true -- Show Punch / Place Animation
+
+autoRest = false
+restTime = 10  -- Minutes
+restInterval = 60 -- Minutes
+disconnectOnRest = false
+
+autoRetrieve = false -- Auto Retrieve Seed From Gaia & Block From UT
+minSeedToRetrieve = 200 -- Minimum Seed in Gaia before Retrieving
+
+autoStopSc = false -- Auto Stop Script on Certain Level
+stopOnLevel = 18
+
+disconnectWhenDone = true -- Auto Disconnect When Finished
+
+autoTakePickaxe = false
+pickaxeID = 98
+pickaxeWorlds = {
+    "WORLD1|DOORID",
+    "WORLD2|DOORID",
+    "WORLD3|DOORID",
+}
+
+autoBuyPack = false
+packName = "world_lock"
+packPrice = 2000
+packItemID = {242}
+packCount = 1 -- Minimum Pack Before Buying
+packWorlds = {
+    "WORLD1|DOORID",
+    "WORLD2|DOORID",
+    "WORLD3|DOORID",
+}
+
+autoBuyClothes = true
+randomSkinColor = true
+
+randomChat = true
+randomChatList = {
+    "Hmm, apa yang harus saya lakukan?",
+    "Saya merasa seperti berbicara dengan diri sendiri.",
+    "Mungkin saya perlu lebih banyak teman.",
+    "Hei, apakah ada seseorang di sana?",
+    "Saya suka berbicara sendiri, itu menyenangkan.",
+    "Mungkin saya perlu mengunjungi dunia lain."
+}
+
+joinRandomWorld = false -- Joining Worlds to Clear History After Dropping Pack
+randomWorldList = {"WORLD1234", "WORLD2234", "WORLD3234"}
+
+trashList = {138,1796,5028,5032,5036,5038,5044,5040,6336,7162,7164,8746}
+goodItemList = {289,2878,2872} -- Bot Will Drop Item in the List
+saveItemWorlds = {
+    "WORLD1|DOORID",
+    "WORLD2|DOORID",
+    "WORLD3|DOORID",
+}
+
+-- ==========================[Delay Settings]========================== 
+
+dynamicDelay = true -- Variation Delay for delayHit (delayHit-10 - delayHit+10)
+
+delayHit = 200 -- Milisecond
+delayPlace = 280
+delayWarp = 6000
+delayOnExecute = 2000
+delayReconnect = 30 -- Second
+
+-- ==============================[Malady]============================== 
+
+autoConsume = false
+consumeID = 8542
+consumeStorages = {
+    "STORAGE1|DOORID",
+    "STORAGE2|DOORID",
+    "STORAGE3|DOORID",
+}
+
+autoGetMalady = true -- Bot Will Try to Get Malady By Talking (Grumbleteeth) or Walking (Chicken Feet)
+getMaladyWorlds = {
+    "WORLD1|DOORID",
+    "WORLD2|DOORID",
+    "WORLD3|DOORID",
+} -- Worlds for Bot to Warp there to get malady
+
+-- =========================[Webhook Settings]========================= 
+
+mainWebhookURL = "https://discord.com/api/webhooks/"
+notifWebhookURL = "https://discord.com/api/webhooks/"
+
+allBotWebhookURL = "https://discord.com/api/webhooks/"
+allBotMessageID = ""
